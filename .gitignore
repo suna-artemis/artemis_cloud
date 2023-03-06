@@ -34,3 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vs code config
+.vscode
+
+# files for upload testing are not allowed to be submitted to the github repository
+static/*
