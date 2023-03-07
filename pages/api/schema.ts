@@ -2,7 +2,7 @@ import * as fsp from 'fs/promises'
 
 import { createSchema } from 'graphql-yoga'
 
-export const STATIC_ROOT_PATH = 'static'
+export const STATIC_ROOT_PATH = 'root'
 
 enum FileInfoType {
   FILE = 'file',
