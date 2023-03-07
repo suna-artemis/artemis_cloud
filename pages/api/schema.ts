@@ -2,7 +2,7 @@ import * as fsp from 'fs/promises'
 
 import { createSchema } from 'graphql-yoga'
 
-const STATIC_ROOT_PATH = './static'
+export const STATIC_ROOT_PATH = 'static'
 
 enum FileInfoType {
   FILE = 'file',
@@ -18,6 +18,7 @@ interface FileInfo {
 
 const typeDefs = /* GraphQL */ `
   scalar File
+  scalar Buffer
   type FileInfo {
     name: String!
     type: String!
@@ -27,6 +28,7 @@ const typeDefs = /* GraphQL */ `
     FileInfo: FileInfo!
     parentDirectory(parentDirectory: String!): String!
     getFileListByParentDirectory(parentDirectory: String!): [FileInfo!]!
+    getFileContentByParentDirectory(parentDirectory: String!): Buffer!
   }
   type Mutation {
     uploadFileList(fileList: [File!]!, parentDirectory: String!): [FileInfo]!
@@ -39,9 +41,14 @@ const resolvers = {
       _: unknown,
       { parentDirectory }: { parentDirectory: string }
     ): Promise<FileInfo[]> => {
-      const res = await fsp.readdir(`${STATIC_ROOT_PATH}${parentDirectory}`, {
-        withFileTypes: true,
-      })
+      const res =
+        (await fsp
+          .readdir(`${STATIC_ROOT_PATH}${parentDirectory}`, {
+            withFileTypes: true,
+          })
+          .catch((error) => {
+            fsp.mkdir(`${STATIC_ROOT_PATH}${parentDirectory}`)
+          })) ?? []
       return res.map((file) => ({
         name: file.name,
         type: file.isFile()
@@ -50,6 +57,13 @@ const resolvers = {
           ? FileInfoType.DIRECTORY
           : FileInfoType.OTHER,
       }))
+    },
+    getFileContentByParentDirectory: async (
+      _: unknown,
+      { parentDirectory }: { parentDirectory: string }
+    ): Promise<Buffer> => {
+      const res = await fsp.readFile(`${STATIC_ROOT_PATH}${parentDirectory}`)
+      return res
     },
     parentDirectory: (
       _: unknown,

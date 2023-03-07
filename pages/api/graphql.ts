@@ -9,7 +9,6 @@ export const config = {
     bodyParser: false,
   },
 }
-
 export default createYoga<{
   req: NextApiRequest
   res: NextApiResponse

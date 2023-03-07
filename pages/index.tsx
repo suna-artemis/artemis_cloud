@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Container, Paper, Backdrop } from '@mui/material'
-import { useManualQuery, useMutation, useQueryClient } from 'graphql-hooks'
+import { Container, Paper } from '@mui/material'
+import { useManualQuery, useMutation } from 'graphql-hooks'
+import downloadFile from 'js-file-download'
 
 import FileList from 'artemis/component/FileList'
-import { FileListItemType } from 'artemis/component/FileListItem/type'
+import {
+  FileListItemProps,
+  FileListItemType,
+} from 'artemis/component/FileListItem/type'
 
 const CURRENT_PARENT_DIRECTORY = '..'
 const ROOT_DIR = '/'
@@ -18,7 +22,7 @@ const UPLOAD_FILE_LIST_MUTATION = /* GraphQL */ `
   }
 `
 const GET_FILE_INFO_LIST_BY_PARENT_DIRECTORY = /* GraphQL */ `
-  query MyQuery($parentDirectory: String!) {
+  query getFileInfoListByParentDirectory($parentDirectory: String!) {
     parentDirectory(parentDirectory: $parentDirectory)
     fileItemList: getFileListByParentDirectory(
       parentDirectory: $parentDirectory
@@ -28,11 +32,23 @@ const GET_FILE_INFO_LIST_BY_PARENT_DIRECTORY = /* GraphQL */ `
     }
   }
 `
+const GET_FILE_CONTENT_BY_PARENT_DIRECTORY = /* GraphQL */ `
+  query getFileContentByParentDirectory($parentDirectory: String!) {
+    parentDirectory(parentDirectory: $parentDirectory)
+    fileContentBuffer: getFileContentByParentDirectory(
+      parentDirectory: $parentDirectory
+    )
+  }
+`
 //#endregion
 
 const Index = () => {
-  const client = useQueryClient()
-
+  const [fileType, setFileType] = useState(FileListItemType.DIRECTORY)
+  const [parentDirectoryList, setParentDirectoryList] = useState<string[]>([
+    ROOT_DIR,
+  ])
+  const [fileItemList, setFileItemList] = useState<FileListItemProps[]>([])
+  //#region graphql hook
   const [uploadFiles] = useMutation(UPLOAD_FILE_LIST_MUTATION, {
     onSuccess: (result: any) => {
       getFileInfoByParentDirectory({
@@ -40,13 +56,16 @@ const Index = () => {
       })
     },
   })
-  const [parentDirectoryList, setParentDirectoryList] = useState<string[]>([
-    ROOT_DIR,
-  ])
-
-  // fetch file info list
   const [getFileInfoByParentDirectory, fileInfoRes] = useManualQuery(
     GET_FILE_INFO_LIST_BY_PARENT_DIRECTORY,
+    {
+      variables: {
+        parentDirectory: parentDirectoryList.join(''),
+      },
+    }
+  )
+  const [getFileContentByParentDirectory, fileContentRes] = useManualQuery(
+    GET_FILE_CONTENT_BY_PARENT_DIRECTORY,
     {
       variables: {
         parentDirectory: parentDirectoryList.join(''),
@@ -57,10 +76,42 @@ const Index = () => {
 
   //#region use effect
   useEffect(() => {
-    getFileInfoByParentDirectory({
-      variables: { parentDirectory: parentDirectoryList.join('') },
-    })
-  }, [getFileInfoByParentDirectory, parentDirectoryList])
+    if (
+      !!fileInfoRes &&
+      !fileInfoRes.loading &&
+      !fileInfoRes.error &&
+      fileInfoRes.data?.fileItemList
+    ) {
+      setFileItemList(fileInfoRes.data?.fileItemList)
+    }
+  }, [fileInfoRes])
+  useEffect(() => {
+    fileType === FileListItemType.DIRECTORY
+      ? getFileInfoByParentDirectory({
+          variables: { parentDirectory: parentDirectoryList.join('') },
+        })
+      : getFileContentByParentDirectory({
+          variables: { parentDirectory: parentDirectoryList.join('') },
+        })
+  }, [
+    fileType,
+    parentDirectoryList,
+    getFileInfoByParentDirectory,
+    getFileContentByParentDirectory,
+  ])
+  useEffect(() => {
+    if (
+      !!fileContentRes &&
+      !fileContentRes.loading &&
+      !fileContentRes.error &&
+      fileContentRes.data?.fileContentBuffer
+    ) {
+      downloadFile(
+        Buffer.from(fileContentRes.data.fileContentBuffer.data),
+        parentDirectoryList[parentDirectoryList.length - 1]
+      )
+    }
+  }, [fileContentRes, parentDirectoryList])
   //#endregion
 
   //#region handle method
@@ -78,9 +129,8 @@ const Index = () => {
     fileType: FileListItemType
   ) => {
     if (
-      fileType !== FileListItemType.DIRECTORY ||
-      (parentDirectoryList.length === 1 &&
-        fileName === CURRENT_PARENT_DIRECTORY)
+      parentDirectoryList.length === 1 &&
+      fileName === CURRENT_PARENT_DIRECTORY
     ) {
       // only allow go into directory and disallow to root directory's parent
       return
@@ -90,8 +140,12 @@ const Index = () => {
         parentDirectoryList.slice(0, parentDirectoryList.length - 1)
       )
     } else {
-      // go into target directory
-      setParentDirectoryList(parentDirectoryList.concat(`${fileName}/`))
+      setParentDirectoryList(
+        parentDirectoryList.concat(
+          `${fileName}${fileType === FileListItemType.DIRECTORY ? '/' : ''}`
+        )
+      )
+      setFileType(fileType)
     }
   }
   //#endregion
@@ -125,14 +179,12 @@ const Index = () => {
           },
         }}
       >
-        {fileInfoRes.data && (
-          <FileList
-            fileItemList={fileInfoRes.data.fileItemList}
-            parentDirectory={parentDirectoryList.join('')}
-            onFileSelected={handleFileSelected}
-            onFileClick={handleFileClick}
-          />
-        )}
+        <FileList
+          fileItemList={fileItemList}
+          parentDirectory={parentDirectoryList.join('')}
+          onFileSelected={handleFileSelected}
+          onFileClick={handleFileClick}
+        />
       </Paper>
     </Container>
   )
